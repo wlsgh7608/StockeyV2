@@ -16,13 +16,24 @@ from tqdm import tqdm
 from .models import News, Industry, Stock
 
 kiwi = Kiwi()
-kw_model = KeyBERT("paraphrase-multilingual-MiniLM-L12-v2")
-# kw_model = KeyBERT("skt/kobert-base-v1")
 tfidf_vectorizer = TfidfVectorizer(min_df=5, ngram_range=(1, 5))
 
+class KeyBertPool:
+    def __init__(self, size):
+        self._pool = [KeyBERT("paraphrase-multilingual-MiniLM-L12-v2") for _ in range(size)]
 
-#
-# okt = Okt()
+    def get_object(self):
+        if not self._pool:
+            raise IndexError('The object pool is empty')
+
+        return self._pool.pop()
+
+    def return_object(self, obj):
+        self._pool.append(obj)
+
+# initialization
+object_pool = KeyBertPool(5)  # Create 5 instances of KeyBERT
+
 @api_view()
 def get_cluster_by_keyword(request, keywordId):
     id = request.GET["id"]
@@ -226,6 +237,7 @@ def noun_extractor(text):
 def get_phraze(title_list,name):
     # 명사 추출 함수
     # 모델 설정
+    model = KeyBertPool.get_object()
 
     # 불용어 설정
     stop_words = ['kbs', '뉴스', '기자', '속보', '뉴스1', 'mbc', 'sbs', '뉴스데스크', '일보', '올해', '오늘', '내일', '어제', '내년', '하루', '이틀',
@@ -255,9 +267,9 @@ def get_phraze(title_list,name):
         stop_words.append(word)
 
     # 키워드 추출 함수
-    def keyword_extractor(content):
+    def keyword_extractor(model,content):
         content_nouns = ' '.join(noun_extractor(content))
-        keywords = kw_model.extract_keywords(content_nouns, keyphrase_ngram_range=(1, 2), top_n=3, use_mmr=True,
+        keywords = model.extract_keywords(content_nouns, keyphrase_ngram_range=(1, 2), top_n=3, use_mmr=True,
                                              stop_words=stop_words)
         return keywords
 
@@ -279,7 +291,8 @@ def get_phraze(title_list,name):
     content_nouns = ' '.join(title_list)
 
     text = text_cleaner(content_nouns)  # 공백 및 특수문자 제거
-    keywords = keyword_extractor(text)  # 키워드 추출
+    keywords = keyword_extractor(model,text)  # 키워드 추출
+    KeyBertPool.return_object(model) # KeybertPool 객체 반납
     print(keywords)
     if len(keywords) >= 3:
         rst = [keywords[0][0], keywords[0][1], keywords[1][0], keywords[1][1], keywords[2][0], keywords[2][1]]
